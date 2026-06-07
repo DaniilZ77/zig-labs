@@ -1,4 +1,5 @@
 const std = @import("std");
+const evaluator = @import("evaluator.zig");
 const print = std.debug.print;
 const testing = std.testing;
 
@@ -214,4 +215,29 @@ pub fn main() !void {
     defer allocator.free(test_structs4);
     defer allocator.free(test_structs5);
     defer allocator.free(test_structs6);
+
+    const file = try std.fs.cwd().openFile("input.txt", .{});
+    defer file.close();
+
+    var file_buffer: [4096]u8 = undefined;
+    var reader = file.reader(&file_buffer);
+
+    const s = try reader.interface.takeDelimiter('\n');
+    const numStr = try reader.interface.takeDelimiter('\n');
+    const ctx = try std.fmt.parseFloat(f64, numStr orelse "0");
+
+    var tokens = std.array_list.Managed(evaluator.Token).init(allocator);
+    defer tokens.deinit();
+    var iter = std.mem.tokenizeAny(u8, s orelse "", " ");
+    while (iter.next()) |token| {
+        try tokens.append(token);
+    }
+
+    const arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    var parser = evaluator.Parser.init(arena);
+    const ev = try parser.parse(tokens.items, ctx);
+    const res = evaluator.execute(ev);
+    std.debug.print("{d}", .{res});
 }

@@ -1,1 +1,1 @@
-# zig-lab-02
+# zig-labs

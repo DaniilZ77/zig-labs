@@ -9,21 +9,21 @@ const Evaluator = struct {
     vtable: *const VTable,
 };
 
-fn execute(e: Evaluator) f64 {
+pub fn execute(e: Evaluator) f64 {
     return e.vtable.eval(e.ptr);
 }
 
 const Primitive = struct {
-    v: f64,
+    value: f64,
 
     pub fn eval(ptr: *anyopaque) f64 {
-        const t: *Primitive = @ptrCast(@alignCast(ptr));
-        return t.v;
+        const self: *Primitive = @ptrCast(@alignCast(ptr));
+        return self.value;
     }
 
-    pub fn init(v: f64) Primitive {
+    pub fn init(value: f64) Primitive {
         return Primitive{
-            .v = v,
+            .value = value,
         };
     }
 
@@ -42,8 +42,8 @@ const Plus = struct {
     right: Evaluator,
 
     pub fn eval(ptr: *anyopaque) f64 {
-        const t: *Plus = @ptrCast(@alignCast(ptr));
-        return execute(t.left) + execute(t.right);
+        const self: *Plus = @ptrCast(@alignCast(ptr));
+        return execute(self.left) + execute(self.right);
     }
 
     pub fn init(l: Evaluator, r: Evaluator) Plus {
@@ -113,13 +113,13 @@ const Sqrt = struct {
     }
 };
 
-const Token = []const u8;
+pub const Token = []const u8;
 
-const Parser = struct {
+pub const Parser = struct {
     allocator: std.heap.ArenaAllocator,
 
     const unit = struct {
-        u: Evaluator,
+        evaluator: Evaluator,
         other: ?[]const Token,
     };
 
@@ -137,14 +137,14 @@ const Parser = struct {
 
     pub fn parse(self: *Parser, tokens: []const Token, ctx: f64) !Evaluator {
         const res = try self.parseInternal(tokens, ctx);
-        return res.u;
+        return res.evaluator;
     }
 
     fn parseInternal(self: *Parser, tokens: []const Token, ctx: f64) !unit {
         if (tokens.len == 0) {
-            const au = try self.allocUnit(Primitive, Primitive.init(0));
+            const primitive = try self.allocUnit(Primitive, Primitive.init(0));
             return unit{
-                .u = au.interface(),
+                .evaluator = primitive.interface(),
                 .other = null,
             };
         }
@@ -155,42 +155,42 @@ const Parser = struct {
         }
 
         if (std.mem.eql(u8, cmd, "sqrt")) {
-            const p = try self.parseInternal(tokens[1..], ctx);
-            const au = try self.allocUnit(Sqrt, Sqrt.init(p.u));
+            const parsed = try self.parseInternal(tokens[1..], ctx);
+            const sqrt = try self.allocUnit(Sqrt, Sqrt.init(parsed.evaluator));
             return unit{
-                .u = au.interface(),
-                .other = p.other,
+                .evaluator = sqrt.interface(),
+                .other = parsed.other,
             };
         }
         if (cmd.len == 1) {
             if (cmd[0] == '+' or cmd[0] == '-') {
-                const p1 = try self.parseInternal(tokens[1..], ctx);
-                const p2 = try self.parseInternal(p1.other orelse &[_]Token{}, ctx);
-                var u = unit{
-                    .u = undefined,
-                    .other = p2.other,
+                const parsed1 = try self.parseInternal(tokens[1..], ctx);
+                const parsed2 = try self.parseInternal(parsed1.other orelse &[_]Token{}, ctx);
+                var return_val = unit{
+                    .evaluator = undefined,
+                    .other = parsed2.other,
                 };
                 if (cmd[0] == '+') {
-                    const au = try self.allocUnit(Plus, Plus.init(p1.u, p2.u));
-                    u.u = au.interface();
+                    const plus = try self.allocUnit(Plus, Plus.init(parsed1.evaluator, parsed2.evaluator));
+                    return_val.evaluator = plus.interface();
                 } else if (cmd[0] == '-') {
-                    const au = try self.allocUnit(Minus, Minus.init(p1.u, p2.u));
-                    u.u = au.interface();
+                    const minus = try self.allocUnit(Minus, Minus.init(parsed1.evaluator, parsed2.evaluator));
+                    return_val.evaluator = minus.interface();
                 }
-                return u;
+                return return_val;
             } else if (cmd[0] == 'x') {
-                const au = try self.allocUnit(Primitive, Primitive.init(ctx));
+                const primitive = try self.allocUnit(Primitive, Primitive.init(ctx));
                 return unit{
-                    .u = au.interface(),
+                    .evaluator = primitive.interface(),
                     .other = tokens[1..],
                 };
             }
         }
 
         const num = try std.fmt.parseFloat(f64, cmd);
-        const au = try self.allocUnit(Primitive, Primitive.init(num));
+        const primitive = try self.allocUnit(Primitive, Primitive.init(num));
         return unit{
-            .u = au.interface(),
+            .evaluator = primitive.interface(),
             .other = tokens[1..],
         };
     }
