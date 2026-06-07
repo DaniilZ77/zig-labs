@@ -70,35 +70,29 @@ const BasicAllocator = struct {
         };
     }
 
-    fn merge(self: *BasicAllocator, prev: ?*Node, curr: *Node, curr_index: u64) bool {
-        const prev_node = prev orelse return false;
+    fn merge_nodes(self: *BasicAllocator, prev: ?*Node, curr: *Node) void {
+        const prev_node = prev orelse return;
         if (curr.used != @sizeOf(Node) or prev_node.block != curr.block) {
-            return false;
+            return;
         }
         prev_node.capacity += curr.capacity;
         prev_node.next = curr.next;
-        self.debug_info("merging node {} with node {} in block {}; new prev node: capacity={}; old curr node: capacity={}\n", .{
-            curr_index - 1,
-            curr_index,
+        self.debug_info("merging nodes in block {}; new prev node: capacity={}; old curr node: capacity={}\n", .{
             prev_node.block,
             prev_node.capacity,
             curr.capacity,
         });
-        return true;
+        return;
     }
 
     pub fn alloc(ctx: *anyopaque, size: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
         const self: *BasicAllocator = @ptrCast(@alignCast(ctx));
         var cur_node = self.state;
         var node_index: u64 = 0;
-        var prev_node: ?*Node = null;
         const aligned_size = std.mem.alignForward(usize, @sizeOf(Node) + size, @alignOf(Node));
         while (cur_node) |node| : (cur_node = node.next) {
             node_index += 1;
             if (node.capacity - node.used < aligned_size) {
-                if (!self.merge(prev_node, node, node_index)) {
-                    prev_node = node;
-                }
                 continue;
             }
             const new_node_buf = @as([*]u8, @ptrCast(@alignCast(node)))[node.used..];
@@ -182,12 +176,10 @@ const BasicAllocator = struct {
                     node.used,
                     node.capacity,
                 });
-                _ = self.merge(prev_node, node, node_index);
+                self.merge_nodes(prev_node, node);
                 return;
             }
-            if (!self.merge(prev_node, node, node_index)) {
-                prev_node = node;
-            }
+            prev_node = node;
         }
     }
 };
@@ -240,5 +232,5 @@ pub fn main(init: std.process.Init) !void {
     var parser = evaluator.Parser.init(arena);
     const ev = try parser.parse(tokens.items, ctx);
     const res = evaluator.execute(ev);
-    std.debug.print("{d}", .{res});
+    std.debug.print("Answer: {d}\n", .{res});
 }
