@@ -1,5 +1,5 @@
 ```
 > zig version
-0.16.0
+0.15.2
 > zig run ./src/main.zig
 ```

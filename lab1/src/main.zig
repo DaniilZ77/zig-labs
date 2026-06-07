@@ -196,12 +196,13 @@ pub const Parser = struct {
     }
 };
 
-pub fn main() !void {
-    const file = try std.fs.cwd().openFile("input.txt", .{});
-    defer file.close();
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const file = try std.Io.Dir.cwd().openFile(io, "input.txt", .{});
+    defer file.close(io);
 
     var file_buffer: [4096]u8 = undefined;
-    var reader = file.reader(&file_buffer);
+    var reader = file.reader(io, &file_buffer);
 
     const s = try reader.interface.takeDelimiter('\n');
     const numStr = try reader.interface.takeDelimiter('\n');

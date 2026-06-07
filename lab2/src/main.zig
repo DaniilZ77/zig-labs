@@ -198,7 +198,7 @@ const TestStruct = struct {
     Field3: f32,
 };
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var basic_allocator = BasicAllocator.init(std.heap.page_allocator, true);
     defer basic_allocator.deinit();
 
@@ -216,11 +216,12 @@ pub fn main() !void {
     defer allocator.free(test_structs5);
     defer allocator.free(test_structs6);
 
-    const file = try std.fs.cwd().openFile("input.txt", .{});
-    defer file.close();
+    const io = init.io;
+    const file = try std.Io.Dir.cwd().openFile(io, "input.txt", .{});
+    defer file.close(io);
 
     var file_buffer: [4096]u8 = undefined;
-    var reader = file.reader(&file_buffer);
+    var reader = file.reader(io, &file_buffer);
 
     const s = try reader.interface.takeDelimiter('\n');
     const numStr = try reader.interface.takeDelimiter('\n');
