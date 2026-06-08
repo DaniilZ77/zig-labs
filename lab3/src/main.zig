@@ -110,7 +110,7 @@ pub fn GraphEvaluator(comptime Nodes: []const type) type {
             inline for (0..Nodes.len) |i| {
                 inline for (@typeInfo(@FieldType(Nodes[i], "deps")).@"struct".fields) |d| {
                     @field(
-                        @field(self.nodes, std.fmt.comptimePrint("{d}", .{i})).deps,
+                        self.nodes[i].deps,
                         d.name,
                     ) = self.get(d.type);
                 }
@@ -121,7 +121,7 @@ pub fn GraphEvaluator(comptime Nodes: []const type) type {
 
         pub fn compute(self: *Self) !void {
             inline for (sorted) |i| {
-                try @field(self.nodes, std.fmt.comptimePrint("{d}", .{i})).compute();
+                try self.nodes[i].compute();
             }
         }
 

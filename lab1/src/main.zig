@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const VTable = struct {
-    eval: *const fn (*anyopaque) f64,
+    eval: *const fn (*anyopaque, f64) f64,
 };
 
 const Evaluator = struct {
@@ -9,14 +9,33 @@ const Evaluator = struct {
     vtable: *const VTable,
 };
 
-pub fn execute(e: Evaluator) f64 {
-    return e.vtable.eval(e.ptr);
+pub fn execute(e: Evaluator, ctx: f64) f64 {
+    return e.vtable.eval(e.ptr, ctx);
 }
+
+const Variable = struct {
+    pub fn eval(_: *anyopaque, ctx: f64) f64 {
+        return ctx;
+    }
+
+    pub fn init() Variable {
+        return Variable{};
+    }
+
+    pub fn interface(self: *Variable) Evaluator {
+        return Evaluator{
+            .ptr = self,
+            .vtable = &VTable{
+                .eval = &eval,
+            },
+        };
+    }
+};
 
 const Primitive = struct {
     value: f64,
 
-    pub fn eval(ptr: *anyopaque) f64 {
+    pub fn eval(ptr: *anyopaque, _: f64) f64 {
         const self: *Primitive = @ptrCast(@alignCast(ptr));
         return self.value;
     }
@@ -41,9 +60,9 @@ const Plus = struct {
     left: Evaluator,
     right: Evaluator,
 
-    pub fn eval(ptr: *anyopaque) f64 {
+    pub fn eval(ptr: *anyopaque, ctx: f64) f64 {
         const self: *Plus = @ptrCast(@alignCast(ptr));
-        return execute(self.left) + execute(self.right);
+        return execute(self.left, ctx) + execute(self.right, ctx);
     }
 
     pub fn init(l: Evaluator, r: Evaluator) Plus {
@@ -67,9 +86,9 @@ const Minus = struct {
     left: Evaluator,
     right: Evaluator,
 
-    pub fn eval(ptr: *anyopaque) f64 {
+    pub fn eval(ptr: *anyopaque, ctx: f64) f64 {
         const t: *Minus = @ptrCast(@alignCast(ptr));
-        return execute(t.left) - execute(t.right);
+        return execute(t.left, ctx) - execute(t.right, ctx);
     }
 
     pub fn init(l: Evaluator, r: Evaluator) Minus {
@@ -92,9 +111,9 @@ const Minus = struct {
 const Sqrt = struct {
     v: Evaluator,
 
-    pub fn eval(ptr: *anyopaque) f64 {
+    pub fn eval(ptr: *anyopaque, ctx: f64) f64 {
         const t: *Sqrt = @ptrCast(@alignCast(ptr));
-        return std.math.sqrt(execute(t.v));
+        return std.math.sqrt(execute(t.v, ctx));
     }
 
     pub fn init(v: Evaluator) Sqrt {
@@ -135,12 +154,12 @@ pub const Parser = struct {
         return ptr;
     }
 
-    pub fn parse(self: *Parser, tokens: []const Token, ctx: f64) !Evaluator {
-        const res = try self.parseInternal(tokens, ctx);
+    pub fn parse(self: *Parser, tokens: []const Token) !Evaluator {
+        const res = try self.parseInternal(tokens);
         return res.evaluator;
     }
 
-    fn parseInternal(self: *Parser, tokens: []const Token, ctx: f64) !unit {
+    fn parseInternal(self: *Parser, tokens: []const Token) !unit {
         if (tokens.len == 0) {
             const primitive = try self.allocUnit(Primitive, Primitive.init(0));
             return unit{
@@ -151,11 +170,11 @@ pub const Parser = struct {
 
         const cmd = tokens[0];
         if (cmd.len == 0) {
-            return try self.parseInternal(tokens[1..], ctx);
+            return try self.parseInternal(tokens[1..]);
         }
 
         if (std.mem.eql(u8, cmd, "sqrt")) {
-            const parsed = try self.parseInternal(tokens[1..], ctx);
+            const parsed = try self.parseInternal(tokens[1..]);
             const sqrt = try self.allocUnit(Sqrt, Sqrt.init(parsed.evaluator));
             return unit{
                 .evaluator = sqrt.interface(),
@@ -164,8 +183,8 @@ pub const Parser = struct {
         }
         if (cmd.len == 1) {
             if (cmd[0] == '+' or cmd[0] == '-') {
-                const parsed1 = try self.parseInternal(tokens[1..], ctx);
-                const parsed2 = try self.parseInternal(parsed1.other orelse &[_]Token{}, ctx);
+                const parsed1 = try self.parseInternal(tokens[1..]);
+                const parsed2 = try self.parseInternal(parsed1.other orelse &[_]Token{});
                 var return_val = unit{
                     .evaluator = undefined,
                     .other = parsed2.other,
@@ -179,9 +198,9 @@ pub const Parser = struct {
                 }
                 return return_val;
             } else if (cmd[0] == 'x') {
-                const primitive = try self.allocUnit(Primitive, Primitive.init(ctx));
+                const variable = try self.allocUnit(Variable, Variable.init());
                 return unit{
-                    .evaluator = primitive.interface(),
+                    .evaluator = variable.interface(),
                     .other = tokens[1..],
                 };
             }
@@ -219,7 +238,8 @@ pub fn main(init: std.process.Init) !void {
     defer arena.deinit();
 
     var parser = Parser.init(arena);
-    const ev = try parser.parse(tokens.items, ctx);
-    const res = execute(ev);
-    std.debug.print("{d}", .{res});
+    const ev = try parser.parse(tokens.items);
+    const res1 = execute(ev, ctx);
+    const res2 = execute(ev, -3);
+    std.debug.print("{d} {d}", .{ res1, res2 });
 }
